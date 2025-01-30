@@ -1,0 +1,34 @@
+---
+  name: CI
+  on:
+    workflow_dispatch:
+      inputs:
+        ext_project_name:
+          description: The external project name
+          required: true
+          type: string
+          default: LatePayment
+  permissions:
+    id-token: write
+    contents: read
+    packages: write
+  jobs:
+    Dotnet_Core_CI:
+      uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/ci.yml@v1
+      with:
+        project-type: Dotnet_core
+        bypass_linting: true
+        dotnet_project_list: LatePaymentLogic/LatePaymentLogic.csproj
+        versionFile: VersionInfo.cs
+      secrets: inherit
+    Dotnet_SelfContained_Package:
+      uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/ci.yml@v1
+      needs: Dotnet_Core_CI
+      with:
+        project-type: Dotnet_core
+        bypass_linting: true
+        dotnet_project_list: LatePaymentLogic/LatePaymentLogic.csproj
+        versionFile: VersionInfo.cs
+        self_contained_package: true
+      secrets: inherit
+  
