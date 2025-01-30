@@ -1,0 +1,274 @@
+name: CI
+
+on:
+  # This allows other workflows to call it.
+  workflow_call:
+    inputs:
+      versionFile:
+        description: "Specify the version file for dotnet"
+        required: false
+        type: string
+      project-type:
+        description: "specify the type of project AWS, Dotnet_core, Dotnet_frame, Node.js, liquibase, SSIS, dacpac, Python, Java"
+        required: true
+        type: string
+      python-version:
+        description: "specify python version"
+        required: false
+        type: string
+      python-package-name:
+        description: "specify package name"
+        required: false
+        type: string
+      ssis-project-name:
+        description: "specify package name's"
+        required: false
+        type: string
+      bypass_linting:
+        description: This is to be used internally only
+        type: boolean
+        default: false
+      java-version:
+        description: "specify Java Version"
+        required: false
+        type: string
+      pom-path:
+        description: "specify pom Path"
+        required: false
+        type: string
+      node-version:
+        description: "specify nodejs Version"
+        required: false
+        type: string
+      liquibase_scripts:
+        description: "Must Specify at least sql folder to build"
+        required: false
+        type: string
+      dacpac_solution_dir:
+        description: "Must Specify dacpac solution dir"
+        required: false
+        type: string
+      dacpac_project_list:    #NEW
+        description: "A list of projects to pack"
+        required: false
+        type: string
+      dotnet_solution_dir:
+        description: "Must Specify dacpac solution dir"
+        required: false
+        type: string
+      dotnet_project_list:
+        description: "A list of projects to pack (framework only)"
+        required: false
+        type: string
+      docker_package_version:
+        description: Version of Dockerfile
+        default: '0.1.0'
+        required: false
+        type: string
+      dockerfile_path:
+        description: Dockerfile path
+        default: '.'
+        required: false
+        type: string
+      docker_image_name:
+        description: Name of Docker Image
+        default: 'Test repo'
+        required: false
+        type: string
+      role_arn:
+        description: AWS Role ARN
+        required: false
+        type: string
+      shell_script_name:
+        description: Shell Script name
+        required: false
+        type: string
+      shell_script_parameters:
+        description: Shell Script Parameters
+        required: false
+        type: string
+      aws_region:
+        description: Region used in aws
+        required: false
+        type: string
+      enrollment_environment:
+        description: environment to be ran in
+        required: false
+        type: string
+        default: "dev"
+      enrollment_registry:
+        description: registry type ecr or ghcr.io
+        required: false
+        type: string
+        default: "ghcr.io"
+      enrollment_PIPELINE_TYPE:
+        description: Pipeline type
+        required: false
+        type: string
+      enrollment_SUB_TYPE:
+        description: ECS run or Cloudformation
+        required: false
+        type: string
+        default: ""
+      enrollment_NAME:
+        description: Name of project
+        required: false
+        type: string
+        default: ""
+      enrollment_SERVICE_NAME:
+        description: Name of project service
+        required: false
+        type: string
+        default: ""
+
+#Permission can be added at job level or workflow level
+permissions:
+  contents: read    # This is required for actions/checkout
+  packages: write
+
+jobs:
+  linting:
+      if: inputs.bypass_linting == false
+      uses: "./.github/workflows/linter.yml"
+
+      permissions:
+        contents: read
+      secrets: inherit
+
+  detect-and-run:
+    runs-on:
+      group: USMG-CORE-RUNNER-GROUP
+    steps:
+        - name: Check Project Type
+          run: echo "Running CI workflow for project type:${{ inputs['project-type'] }}"
+
+  call_python_workflow:
+    if: ${{ inputs['project-type'] == 'python' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/python-ci.yml@v1
+    with:
+      python-version: ${{ inputs['python-version'] }}
+      python-package-name: ${{ inputs['package-name'] }}
+    permissions:
+      contents: read
+      packages: write
+
+  call_shell_script_workflow:
+    if: ${{ inputs['project-type'] == 'shell_script' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/shell_script_run.yml@v1
+    with:
+      role_arn: ${{ inputs['role_arn'] }}
+      shell_script_name: ${{ inputs['shell_script_name'] }}
+      shell_script_parameters: ${{ inputs['shell_script_parameters'] }}
+    permissions:
+      id-token: write #TODO: Need To fix
+      contents: read
+      packages: write
+
+  call_ssis_workflow:
+    if: ${{ inputs['project-type'] == 'ssis' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/ssis-ci.yml@v1
+    with:
+      ssis-project-name: ${{ inputs['ssis-project-name'] }}
+    permissions:
+      contents: read
+      packages: write
+
+  call_java_workflow:
+    if: ${{ inputs['project-type'] == 'Java' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/java-ci.yml@v1
+    with:
+      java-version: ${{ inputs['java-version'] }}
+      pom-path: ${{ inputs['pom-path'] }}
+    permissions:
+      contents: read
+      packages: write
+
+  call_nodejs_workflow:
+    if: ${{ inputs['project-type'] == 'Nodejs' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/nodejs-ci.yml@v1
+    with:
+      node-version: ${{ inputs['node-version'] }}
+    permissions:
+      contents: read
+      packages: write
+
+  call_aws_workflow:
+    if: ${{ inputs['project-type'] == 'aws' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/aws-ci.yml@v1
+    permissions:
+      contents: read
+      packages: write
+
+  call_liquibase_workflow:
+    if: ${{ inputs['project-type'] == 'liquibase' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/liquibase-ci.yml@v1
+    with:
+     liquibase_scripts: ${{ inputs['liquibase_scripts'] }}
+    permissions:
+      contents: read
+      packages: write
+
+  call_dacpac_workflow:
+    if: ${{ inputs['project-type'] == 'dacpac' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/dacpac_ci.yml@v1
+    with:
+     dacpac_solution_dir: ${{ inputs['dacpac_solution_dir'] }}
+     dacpac_project_list: ${{ inputs['dacpac_project_list'] }}   #NEW
+    permissions:
+      contents: read
+      packages: write
+
+  call_dotnet_frame_workflow:
+    if: ${{ inputs['project-type'] == 'Dotnet_frame' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/dotnet_frame_ci.yml@v1
+    with:
+      dotnet_solution_dir: ${{ inputs['dotnet_solution_dir'] }}
+      dotnet_project_list: ${{ inputs['dotnet_project_list'] }}   #NEW
+      versionFile: ${{ inputs['versionFile'] }}
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit
+
+  call_dotnet_core_workflow:
+    if: ${{ inputs['project-type'] == 'Dotnet_core' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/dotnet_core_ci.yml@v1
+    with:
+      dotnet_solution_dir: ${{ inputs['dotnet_solution_dir'] }}
+      versionFile: ${{ inputs['versionFile'] }}
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit
+
+  call_docker_workflow:
+    if: ${{ inputs['project-type'] == 'docker' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/docker-ci.yml@v1
+    with:
+      docker_package_version: ${{ inputs['docker_package_version'] }}
+      dockerfile_path: ${{ inputs.dockerfile_path }}
+      docker_image_name: ${{ inputs.docker_image_name }}
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit
+
+  call_enrollment_java_to_ecs_workflow:
+    if: ${{ inputs.project-type == 'enrollment-java-ecs' }}
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/enrollment_java_ecs_ci.yml@v1
+    with:
+      role_arn: ${{ inputs.role_arn }}
+      aws_region: ${{ inputs.aws_region }}
+      enrollment_environment: ${{ inputs.enrollment_environment }}
+      enrollment_registry: ${{ inputs.enrollment_registry }}
+      enrollment_PIPELINE_TYPE: ${{ inputs.enrollment_PIPELINE_TYPE }}
+      enrollment_SUB_TYPE: ${{ inputs.enrollment_SUB_TYPE }}
+      enrollment_NAME: ${{inputs.enrollment_NAME }}
+      enrollment_SERVICE_NAME: ${{ inputs.enrollment_SERVICE_NAME }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # This is required for requesting the JWT TODO: Need to Fix
+    secrets: inherit
+
+
