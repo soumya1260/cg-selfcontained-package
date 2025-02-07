@@ -3,10 +3,15 @@
   on:
     workflow_dispatch:
       inputs:
-        ext_project_name:
-          description: The external project name
-          required: true
+        self_contained:
+          description: Self Contained Package
+          required: false
+          type: boolean
+          default: false
+        ext_project_name: #The is required to locate the corresponding template and to  generate the correct .csproj file when self_contained is set to true
+          description:  "ext_project_name: The external project name to load the .csproj file when self_contained is true"
           type: string
+          required: false
           default: LatePayment
   permissions:
     id-token: write
@@ -14,7 +19,7 @@
     packages: write
   jobs:
     Dotnet_Core_CI:
-      uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/ci.yml@v1
+      uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/ci.yml@feature/self-contained-package
       with:
         project-type: Dotnet_core
         bypass_linting: true
@@ -22,13 +27,13 @@
         versionFile: VersionInfo.cs
       secrets: inherit
     Dotnet_SelfContained_Package:
-      uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/ci.yml@v1
-      needs: Dotnet_Core_CI
+      if: inputs.self_contained == true
+      uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/ci.yml@feature/self-contained-package
       with:
         project-type: Dotnet_core
         bypass_linting: true
         dotnet_project_list: LatePaymentLogic/LatePaymentLogic.csproj
         versionFile: VersionInfo.cs
-        self_contained_package: true
-      secrets: inherit
-  
+        self_contained: ${{ inputs.self_contained }}
+        ext_project_name: ${{ inputs.ext_project_name }}
+      secrets: inherit  
