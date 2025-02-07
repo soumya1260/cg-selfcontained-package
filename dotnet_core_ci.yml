@@ -1,112 +1,113 @@
-name: DOTNET_CORE
-
-on:
-# This allows other workflows to call it.
-  workflow_call:
-    inputs:
-      versionFile:
-        description: The versionFile to be versioned
-        type: string
-        required: false
-      dotnet_solution_dir:
-        description: The name of the solution folder if not root
-        type: string
-        required: false
-      self_contained:
-        description: Self-contained package
-        required: false
-        type: boolean
-        default: false      
-
-# Permission can be added at job level or workflow level
-permissions:
-  contents: read    # This is required for actions/checkout
-  packages: write
-
-env:
-  NUGET_DIR: ${{ github.workspace }}\publish
-  PACKAGE_TOKEN:  ${{secrets.ORG_REPO_READ_ACCESS}}
-  PACKAGE_USER:  "GTHBAUTO_Zilver"
-
-defaults:
-  run:
-    shell: pwsh
-
-# Groups together all jobs that work within this workflow
-jobs:
-  build_core:
-    runs-on: Windows-Runner
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # Get all history to allow automatic versioning using MinVer
-
-#Below VersioningScript fails limitation of 65,535 in .NET for build id for where the code sets the version number
-
-    - name: Run Versioning Script
-      uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/actions/RunVersioningScript@v1
-      with:
-        versionFile: "${{ inputs.versionFile }}"
-        RepoPath: "${{ github.workspace }}"
-
-# Create the NuGet package in the folder from the environment variable NuGetDirectory
-    - name: build the files
-      run: |
-          dotnet build ${{ github.workspace }}\${{ inputs.dotnet_solution_dir }} --configuration Release
-
-
-
- # note this will only work for dotnet test add logic for other testing methods if applicable - removed to due some projects having failures
- #TODO add flag to bypass unit tests??
- #   - name: Run Tests
- #     run: |
- #         dotnet test
-
-    - name: pack the files
-      run: |
-          dotnet pack --configuration Release --no-build --no-restore --output ${{ env.NUGET_DIR }}
-
-# Publish the NuGet package as an artifact for core, so they can be used in the following jobs
-    - uses: actions/upload-artifact@v4
-      with:
-        name: ${{ github.event.repository.name }}
-        path: ${{ env.NUGET_DIR }}
-        retention-days: 7
-
-  push_package:
-    needs: build_core
-    if: (always() && needs.build_core.result == 'success')
-    uses: "./.github/workflows/nuget_package.yml"
-    secrets:  inherit
-
-# Create and push self-contained package
-  self_contained_package:
-    if: inputs.self_contained == true
-    runs-on: windows-latest
-    steps:
-      - name: Create self-contained package .csproj
-        shell: pwsh
-        run: |
-          echo "Generating self-contained project file using PowerShell"
-
-          # Copy the template .csproj file
-          Copy-Item -Path 'misc/${{ github.event.inputs.ext_project_name }}SC.csproj.template' -Destination 'self_contained_out/${{ github.event.inputs.ext_project_name }}SC.csproj'
-
-          # Load the .csproj file
-          [xml]$xmldoc = Get-Content 'self_contained_out/${{ github.event.inputs.ext_project_name }}SC.csproj'
-
-          # Extract the version from VersionInfo.cs using regex
-          $versionInfo = (Get-Content 'VersionInfo.cs' | Select-String -Pattern 'AssemblyVersion\(""([^""]+)""\)').Matches.Groups[1].Value
+---
+  name: DOTNET_CORE
+  on:
+    workflow_call:
+      inputs:
+        versionFile:
+          description: The versionFile to be versioned
+          type: string
+          required: false
+        dotnet_solution_dir:
+          description: The name of the solution folder if not root
+          type: string
+          required: false
+        ext_project_name:
+          description: The is required to locate the corresponding template and to  generate the correct .csproj file when self_contained is set to ture
+          type: string
+          required: false
+        self_contained:
+          description: Self-contained package
+          required: false
+          type: boolean
+          default: false
+  permissions:
+    contents: read
+    packages: write
+  env:
+    NUGET_CORE_DIR: ${{ github.workspace }}\publish\core
+    NUGET_SC_DIR: ${{ github.workspace }}\publish\sc
+    PACKAGE_TOKEN: ${{secrets.ORG_REPO_READ_ACCESS}}
+    PACKAGE_USER: GTHBAUTO_Zilver
+  defaults:
+    run:
+      shell: pwsh
+  jobs:
+    build_core:
+      if: inputs.self_contained == false
+      runs-on: Windows-Runner
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
+        - name: Run Versioning Script
+          id: versioning
+          uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/actions/RunVersioningScript@v1
+          with:
+            versionFile: ${{ inputs.versionFile }}
+            RepoPath: ${{ github.workspace }}
+        - name: build the files
+          run: >
+            dotnet build ${{ github.workspace }}\${{ inputs.dotnet_solution_dir }}
+            --configuration Release
+        - name: pack the files
+          run: >
+            dotnet pack --configuration Release --no-build --no-restore --output ${{ env.NUGET_CORE_DIR }}
+        - uses: actions/upload-artifact@v4
+          with:
+            name: ${{ github.event.repository.name }}-Core
+            path: ${{ env.NUGET_CORE_DIR }}
+            retention-days: 7
+    push_package:
+      needs: [build_core]
+      if: (always() && needs.build_core.result == 'success' )
+      uses: ./.github/workflows/nuget_package.yml
+      secrets: inherit
+    self_contained_package:
+       if: inputs.self_contained == true
+       runs-on: Windows-Runner
+       steps:
+         - uses: actions/checkout@v4
+           with:
+             fetch-depth: 0
+         - name: Create self-contained package .csproj
+           shell: pwsh
+           run: >
+             echo "Generating self-contained project file using PowerShell"   
+             
+             # Extract Version from VersionInfo.cs
+    
+             $versionInfo =  Select-String -Path ${{ inputs.versionFile }}  -Pattern 'AssemblyVersion\("([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"\)' |  ForEach-Object { $_.Matches | ForEach-Object { $_.Groups[1].Value }}
             
-          # Set the version in the .csproj file
-          $xmldoc.Project.PropertyGroup.Version = $versionInfo
-            
-          # Save the updated .csproj back
-          $xmldoc.Save('self_contained_out/${{ github.event.inputs.ext_project_name }}SC.csproj')
+             echo "Version: $versionInfo"
 
-      - name: Pack NuGet Artifact Self-Contained
-        run: |
-          echo "Packing self-contained .NET artifact"
+             New-Item -ItemType Directory -force -Path "self_contained_out"
 
-          dotnet pack self_contained_out/${{ github.event.inputs.ext_project_name }}SC.csproj --output nupkgs
+             Copy-Item -Path 'misc/${{ inputs.ext_project_name }}SC.csproj.template' -Destination 'self_contained_out/${{ inputs.ext_project_name }}SC.csproj'
+
+             # Load the .csproj file
+
+             [xml]$xmldoc = Get-Content 'self_contained_out/${{ inputs.ext_project_name }}SC.csproj'
+
+             # Set the version in the .csproj file
+             $xmldoc.Project.PropertyGroup.Version = $versionInfo
+
+             # Save the updated .csproj back
+             $xmlDoc.Save("self_contained_out/${{ inputs.ext_project_name }}SC.csproj")
+
+         - name: Pack NuGet Artifact Self-Contained
+           run: >
+             echo "Packing self-contained .NET artifact"
+     
+             dotnet pack self_contained_out/${{ inputs.ext_project_name }}SC.csproj --output ${{ env.NUGET_SC_DIR }}
+
+         - uses: actions/upload-artifact@v4
+           with:
+             name: ${{ github.event.repository.name }}-SC
+             path: ${{ env.NUGET_SC_DIR }}
+             retention-days: 7
+        
+    push_self_contained_package:
+      needs: [self_contained_package]
+      if: (always() && needs.self_contained_package.result == 'success' )
+      uses: ./.github/workflows/nuget_package.yml
+      secrets: inherit
