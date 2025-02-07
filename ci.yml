@@ -12,6 +12,15 @@ on:
         description: "specify the type of project AWS, Dotnet_core, Dotnet_frame, Node.js, liquibase, SSIS, dacpac, Python, Java"
         required: true
         type: string
+      self_contained:
+          description: Indicate if the package is Self Contained
+          required: false
+          type: boolean
+          default: false
+      ext_project_name:
+          description: The is required to locate the corresponding template and to  generate the correct .csproj file when self_contained is set to ture
+          type: string
+          required: false
       python-version:
         description: "specify python version"
         required: false
@@ -232,10 +241,12 @@ jobs:
 
   call_dotnet_core_workflow:
     if: ${{ inputs['project-type'] == 'Dotnet_core' }}
-    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/dotnet_core_ci.yml@v1
+    uses: zilvertonz/usmg-gdem-ghactions-workflows/.github/workflows/dotnet_core_ci.yml@feature/self-contained-package
     with:
       dotnet_solution_dir: ${{ inputs['dotnet_solution_dir'] }}
       versionFile: ${{ inputs['versionFile'] }}
+      self_contained: ${{ inputs['self_contained'] }}
+      ext_project_name: ${{ inputs['ext_project_name'] }}
     permissions:
       contents: read
       packages: write
