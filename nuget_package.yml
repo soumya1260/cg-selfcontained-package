@@ -1,0 +1,36 @@
+name: NUGET_PACKAGE
+
+on:
+  # This allows other workflows to call it.
+  workflow_call:
+    
+#Permission can be added at job level or workflow level
+permissions:
+  contents: read    # This is required for actions/checkout
+  packages: write
+
+defaults:
+  run:
+    shell: pwsh
+jobs:
+  push_nupkg:
+    runs-on: Windows-Runner
+
+    steps:
+    # Download the NuGet package created in the previous job
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ github.event.repository.name }}
+    
+    # add source to machine nuget.config then push the package to github
+    - name: nuget source
+      run: |
+        dotnet nuget add source --password ${{ secrets.GITHUB_TOKEN }} --username chsdevops@cigna.com --store-password-in-clear-text --name github "https://nuget.pkg.github.com/zilvertonz/index.json"
+        ls ${{github.workspace}}
+       
+    - name: nuget package
+      run: |
+        Get-ChildItem ${{ github.workspace }}\*.nupkg -Recurse | Foreach-Object {
+          write-output "file: $_"
+          dotnet nuget push $_ --skip-duplicate --api-key ${{ secrets.GITHUB_TOKEN }} --source github
+        }
