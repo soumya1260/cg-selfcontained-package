@@ -1,0 +1,20 @@
+name: Run Versioning Script
+description: A custom action to run the versioning.ps1 script
+
+inputs:
+  versionFile:
+     description: Path to the versionfile
+     required: true
+  RepoPath:
+     description: Path of working dir
+     required: false
+     
+
+   
+runs:
+  using: "composite"
+  steps:
+    - name: Run Versioning Script
+      shell: pwsh
+      run: |
+         pwsh ${{ github.action_path }}/versioning.ps1 -versionFile "${{ inputs.versionFile }}" -RepoPath "${{inputs.RepoPath}}"
